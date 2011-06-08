@@ -26,9 +26,167 @@ module Sysctl
     layout \
       :ldavg, [:fixpt_t, 3],
       :fscale, :long
+
+    memoize
+    def ldavg
+      self[:ldavg].to_a
+    end
+
+    memoize
+    def fscale
+      self[:fscale]
+    end
+  end
+
+  class VMTotal < FFI::Struct
+    layout \
+      :t_rq, :uint16,
+      :t_dw, :uint16,
+      :t_pw, :uint16,
+      :t_sl, :uint16,
+      :t_sw, :uint16,
+      :t_vm, :uint32,
+      :t_avm, :uint32,
+      :t_rm, :uint32,
+      :t_arm, :uint32,
+      :t_vmshr, :uint32,
+      :t_avmshr, :uint32,
+      :t_rmshr, :uint32,
+      :t_armshr, :uint32,
+      :t_free, :uint32
+  end
+
+  class PSStrings < FFI::Struct
+    layout \
+      :ps_argvstr, :pointer,
+      :ps_nargvstr, :int,
+      :ps_envstr, :pointer,
+      :ps_nenvstr, :int
+
+    memoize
+    def argvstr
+      size = FFI.find_type(:pointer)
+
+      (0...self[:ps_nargvstr]).map {|i|
+        self[:ps_argvstr].get_pointer(i * size).read_string
+      }
+    end
+
+    memoize
+    def envstr
+      size = FFI.find_type(:pointer)
+
+      (0...self[:ps_nenvstr]).map {|i|
+        self[:ps_envstr].get_pointer(i * size).read_string
+      }
+    end
+  end
+
+  class UVMexP < FFI::Struct
+    layout \
+      :pagesize, :int,
+      :pagemask, :int,
+      :pageshift, :int,
+      :npages, :int,
+      :free, :int,
+      :active, :int,
+      :inactive, :int,
+      :paging, :int,
+      :wired, :int,
+      :zeropages, :int,
+      :reserve_pagedaemon, :int,
+      :reserve_kernel, :int,
+      :anonpages, :int,
+      :vnodepages, :int,
+      :vtextpages, :int,
+      :freemin, :int,
+      :freetarg, :int,
+      :inactarg, :int,
+      :wiredmax, :int,
+      :anonmin, :int,
+      :vtextmin, :int,
+      :vnodemin, :int,
+      :anonminpct, :int,
+      :vtextminpct, :int,
+      :vnodeminpct, :int,
+      :nswapdev, :int,
+      :swpages, :int,
+      :swpginuse, :int,
+      :swpgonly, :int,
+      :nswget, :int,
+      :nanon, :int,
+      :nanonneeded, :int,
+      :nfreeanon, :int,
+      :faults, :int,
+      :traps, :int,
+      :intrs, :int,
+      :swtch, :int,
+      :softs, :int,
+      :syscalls, :int,
+      :pageins, :int,
+      :swapins, :int,
+      :swapouts, :int,
+      :pgswapin, :int,
+      :pgswapout, :int,
+      :forks, :int,
+      :forks_ppwait, :int,
+      :forks_sharevm, :int,
+      :pga_zerohit, :int,
+      :pga_zeromiss, :int,
+      :zeroaborts, :int,
+      :fltnoram, :int,
+      :fltnoanon, :int,
+      :fltpgwait, :int,
+      :fltpgrele, :int,
+      :fltrelck, :int,
+      :fltrelckok, :int,
+      :fltanget, :int,
+      :fltanretry, :int,
+      :fltamcopy, :int,
+      :fltnamap, :int,
+      :fltnomap, :int,
+      :fltlget, :int,
+      :fltget, :int,
+      :flt_anon, :int,
+      :flt_acow, :int,
+      :flt_obj, :int,
+      :flt_prcopy, :int,
+      :flt_przero, :int,
+      :pdwoke, :int,
+      :pdrevs, :int,
+      :pdswout, :int,
+      :pdfreed, :int,
+      :pdscans, :int,
+      :pdanscan, :int,
+      :pdobscan, :int,
+      :pdreact, :int,
+      :pdbusy, :int,
+      :pdpageouts, :int,
+      :pdpending, :int,
+      :pddeact, :int,
+      :pdreanon, :int,
+      :pdrevnode, :int,
+      :pdrevtext, :int,
+      :fpswtch, :int,
+      :kmapent, :int
   end
 
   CTL_NAMES = CTLRoot.new([
+    ['vm', 2, :node,
+      [
+        ['vmmeter', 1, VMTotal],
+        ['loadavg', 2, LoadAVG],
+        ['psstrings', 3, PSStrings],
+        ['uvmexp', 4, UVMexP],
+        ['swapencrypt', 5, :node],
+        ['nkmempages', 6],
+        ['anonmin', 7],
+        ['vtextmin', 8],
+        ['vnodemin', 9],
+        ['maxslp', 10],
+        ['uspace', 11]
+      ]
+    ],
     ['fs', 3, :node,
       [
         ['posix', nil, :node, [
@@ -117,7 +275,7 @@ module Sysctl
     mip = FFI::MemoryPointer.new(:int, mib.mib.size).write_array_of_int(mib.mib)
 
     if C.sysctl(mip, mib.mib.size, tvp, tvs, nil, 0) != 0
-      raise Errno.const_get(Errno.constants[FFI.errno]) 
+      raise Errno.const_get(Errno.constants[FFI.errno])
     end
 
     tvp.typecast(type)
