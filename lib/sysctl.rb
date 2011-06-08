@@ -20,35 +20,18 @@
 require 'sysctl/extensions'
 
 module Sysctl
-  extend FFI::Library
-  ffi_lib 'c'
+  module C
+    extend FFI::Library
 
-  attach_function :sysctl, [ :pointer, :size_t, :pointer, :pointer, :pointer, :size_t ], :int
+    ffi_lib FFI::Library::LIBC
 
-  class << self
-    alias __c_sysctl__ sysctl
-    private :__c_sysctl__
+    attach_function! :sysctl,  [:pointer, :size_t, :pointer, :pointer, :pointer, :size_t], :int
+
+    attach_function! :sysconf, [:int], :long
   end
 
   def self.sysctl (ctl)
-    mib = CTL_NAMES[ctl]
-    return unless mib
-
-    type = mib.type.is_a?(Symbol) ? FFI.find_type(mib.type) : mib.type
-
-    if type.is_a?(FFI::Type::Builtin) and type.name.downcase == :string
-      tvp = FFI::MemoryPointer.from_string("\0" * 8192)
-      tvs = FFI::MemoryPointer.new(:int).write_int(tvp.size)
-    else
-      tvp = FFI::MemoryPointer.new(type)
-      tvs = FFI::MemoryPointer.new(:int).write_int(type.size)
-    end
-
-    mip = FFI::MemoryPointer.new(:int, mib.mib.size).write_array_of_int(mib.mib)
-
-    raise Errno.const_get(Errno.constants[FFI.errno]) if __c_sysctl__(mip, mib.mib.size, tvp, tvs, nil, 0) != 0
-
-    tvp.typecast(type)
+    nil
   end
 end
 
@@ -65,5 +48,5 @@ end
 begin
   require "sysctl/platform/#{RUBY_PLATFORM.split('-').last.match(/^[a-z]+/i)[0]}"
 rescue LoadError
-  raise "Platform not supported."
+  warn 'sysctl: platform not supported.'
 end
