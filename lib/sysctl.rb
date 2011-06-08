@@ -63,7 +63,7 @@ module Kernel
 end
 
 begin
-  require "sysctl/platform/#{RUBY_PLATFORM.split('-').last}"
+  require "sysctl/platform/#{RUBY_PLATFORM.split('-').last.match(/^[a-z]+/i)[0]}"
 rescue LoadError
   raise "Platform not supported."
 end
