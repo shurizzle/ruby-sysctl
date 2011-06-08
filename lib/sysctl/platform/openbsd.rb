@@ -36,6 +36,7 @@ module Sysctl
         ]]
       ]
     ],
+
     ['hw', 6, :node,
       [
         ['machine', 1, :string],
@@ -59,6 +60,7 @@ module Sysctl
         ['ncpufound', 21]
       ]
     ],
+
     ['user', 8, :node,
       [
         ['cs_path', 1, :string],
@@ -83,6 +85,7 @@ module Sysctl
         ['tzname_max', 20]
       ]
     ],
+
     ['ddb', 9, :node,
       [
         ['radix', 1],
@@ -97,4 +100,26 @@ module Sysctl
       ]
     ]
   ])
+
+  def self.sysctl (ctl)
+    mib = CTL_NAMES[ctl] or return
+
+    type = mib.type.is_a?(Symbol) ? FFI.find_type(mib.type) : mib.type
+
+    if type.is_a?(FFI::Type::Builtin) and type.name.downcase == :string
+      tvp = FFI::MemoryPointer.new(8192)
+      tvs = FFI::MemoryPointer.new(:int).write_int(tvp.size)
+    else
+      tvp = FFI::MemoryPointer.new(type)
+      tvs = FFI::MemoryPointer.new(:int).write_int(type.size)
+    end
+
+    mip = FFI::MemoryPointer.new(:int, mib.mib.size).write_array_of_int(mib.mib)
+
+    if C.sysctl(mip, mib.mib.size, tvp, tvs, nil, 0) != 0
+      raise Errno.const_get(Errno.constants[FFI.errno]) 
+    end
+
+    tvp.typecast(type)
+  end
 end

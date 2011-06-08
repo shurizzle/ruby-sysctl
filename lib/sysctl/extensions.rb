@@ -56,7 +56,7 @@ module FFI
         type = FFI.find_type(type)
       end
 
-      if type.is_a?(Class) and type.ancestors.member?(FFI::Struct)
+      if type.is_a?(Class) && type.ancestors.member?(FFI::Struct)
         type.new(self)
       elsif type.is_a?(Type::Builtin)
         if type.name == :STRING
