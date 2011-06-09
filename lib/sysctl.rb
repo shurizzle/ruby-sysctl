@@ -30,23 +30,31 @@ module Sysctl
     attach_function! :sysconf, [:int], :long
   end
 
-  def self.sysctl (ctl)
+  def self.sysctl (*args)
     nil
+  end
+
+  begin
+    require "sysctl/platform/#{RUBY_PLATFORM.split('-').last.match(/^[a-z]+/i)[0]}"
+    @@supported = true
+  rescue LoadError
+    warn 'sysctl: platform not supported.'
+    @@supported = false
+  end
+
+  def self.supported?
+    @@supported
   end
 end
 
-def sysctl (name)
-  Sysctl.sysctl(name)
+def sysctl (*args, &block)
+  Sysctl.sysctl(*args, &block)
 end
 
 module Kernel
-  def self.sysctl (name)
-    Sysctl.sysctl(name)
+  def self.sysctl (*args, &block)
+    Sysctl.sysctl(*args, &block)
   end
 end
 
-begin
-  require "sysctl/platform/#{RUBY_PLATFORM.split('-').last.match(/^[a-z]+/i)[0]}"
-rescue LoadError
-  warn 'sysctl: platform not supported.'
-end
+
