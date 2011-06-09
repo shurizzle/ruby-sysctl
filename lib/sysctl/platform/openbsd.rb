@@ -171,6 +171,105 @@ module Sysctl
       :kmapent, :int
   end
 
+  SensorStatus = FFI::Enum.new([
+    :unspec,
+    :ok,
+    :warn,
+    :crit,
+    :unknown
+  ])
+
+  SensorType = FFI::Enum.new([
+    :temp,
+    :fanrpm,
+    :volts_dc,
+    :volts_ac,
+    :ohms,
+    :watts,
+    :amps,
+    :watthour,
+    :amphour,
+    :indicator,
+    :integer,
+    :percent,
+    :lux,
+    :drive,
+    :timedelta,
+    :humidity,
+    :freq,
+    :angle
+  ])
+
+  class << SensorType
+    TYPES = [
+      "temp",
+      "fan",
+      "volt",
+      "acvolt",
+      "resistance",
+      "power",
+      "current",
+      "watthour",
+      "amphour",
+      "indicator",
+      "raw",
+      "percent",
+      "illuminance",
+      "drive",
+      "timedelta",
+      "humidity",
+      "frequency",
+      "angle"
+    ]
+
+    def from_num(n)
+      TYPES[n] || 'unknown'
+    end
+  end
+
+  class TimeVal < FFI::Struct
+    layout \
+      :tv_sec, :long,
+      :tv_usec, :long
+  end
+
+  class Sensor < FFI::Struct
+    FINVALID = 1
+    FUNKNOWN = 2
+
+    layout \
+      :desc, [:char, 32],
+      :tv, TimeVal,
+      :value, :int64,
+      :type, SensorType,
+      :status, SensorStatus,
+      :numt, :int,
+      :flags, :int
+
+    memoize
+    def desc
+      self[:desc].to_s
+    end
+  end
+
+  class SensorDev < FFI::Struct
+    layout \
+      :num, :int,
+      :xname, [:char, 16],
+      :maxnumt, [:int, 18],
+      :sensors_count, :int
+
+    memoize
+    def maxnumt
+      self[:maxnumt].to_a
+    end
+
+    memoize
+    def xname
+      self[:xname].to_s
+    end
+  end
+
   CTL_NAMES = CTLRoot.new([
     ['vm', 2, :node,
       [
@@ -187,6 +286,7 @@ module Sysctl
         ['uspace', 11]
       ]
     ],
+
     ['fs', 3, :node,
       [
         ['posix', nil, :node, [
@@ -258,6 +358,30 @@ module Sysctl
       ]
     ]
   ])
+
+  CTL_NAMES['hw.sensors'].tap {|mib|
+    (0..Float::INFINITY).each {|i|
+      mip = FFI::MemoryPointer.new(:int, mib.mib.size + 1).write_array_of_int(mib.mib + [i])
+      tvp = FFI::MemoryPointer.new(SensorDev)
+      tvs = FFI::MemoryPointer.new(:int).write_int(SensorDev.size)
+
+      unless C.sysctl(mip, mib.mib.size + 1, tvp, tvs, nil, 0).zero?
+        break if FFI.errno == 2
+        next if FFI.errno == 6
+      end
+
+      s = tvp.typecast(SensorDev)
+      CTL_NAMES.children['hw']['sensors'] << CTLNode.new(s.xname, i, SensorDev)
+
+      s.maxnumt.each_with_index {|n, j|
+        name = SensorType.from_num(j)
+
+        0.upto(n - 1) {|x|
+          CTL_NAMES.children['hw']['sensors'][s.xname] << CTLNode.new("#{name}#{x}", [j, x], Sensor)
+        }
+      }
+    }
+  }
 
   def self.sysctl (ctl)
     mib = CTL_NAMES[ctl] or return

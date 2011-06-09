@@ -65,7 +65,7 @@ module Sysctl
         [mib, node]
       }
 
-      mib.mib.compact!
+      mib.mib = mib.mib.compact.flatten
       mib
     rescue
       nil
@@ -78,29 +78,27 @@ module Sysctl
     def initialize (name, value, type=:int, children=nil)
       @name, @value, @type = name, value, type || :int
 
-      if type == :node
-        @children = {}
+      @children = {}
 
-        (class << self; self; end).send(:define_method, :<<) {|node|
-          return unless node.is_a?(CTLNode)
-          @children[node.name] = node
-          self
+      if children.is_a?(Array)
+        children.each {|child|
+          self << (child.is_a?(CTLNode) ? child : CTLNode.new(*child))
         }
-
-        (class << self; self; end).send(:define_method, :children) {
-          @children.dup
-        }
-
-        (class << self; self; end).send(:define_method, :[]) {|name|
-          @children[name]
-        }
-
-        if children.is_a?(Array)
-          children.each {|child|
-            self << (child.is_a?(CTLNode) ? child : CTLNode.new(*child))
-          }
-        end
+      end
     end
+
+    def << (node)
+      return unless node.is_a?(CTLNode)
+      @children[node.name] = node
+      self
+    end
+
+    def children
+      @children.dup
+    end
+
+    def [] (name)
+      @children[name]
     end
   end
 end
